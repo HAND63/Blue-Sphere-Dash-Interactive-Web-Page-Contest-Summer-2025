@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Blue Sphere Dash</title>
+    <style>
+        /* 基本スタイル */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f0f0f0;
+            font-family: 'Hiragino Kaku Gothic ProN', 'メイリオ', Meiryo, sans-serif;
+            overflow: hidden;
+        }
+        .page-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto; /* PCでコンテンツが多い場合にスクロール */
+        }
+        #game-container {
+            position: relative;
+            border: 2px solid #333;
+            overflow: hidden;
+            width: 800px;
+            max-width: 100%;
+            aspect-ratio: 2 / 1; /* PC版の縦横比 */
+            flex-shrink: 0;
+        }
+        #game-canvas {
+            display: block;
+            background-color: #87CEEB;
+            width: 100%;
+            height: 100%;
+        }
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.7); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; z-index: 10; padding: 10px; box-sizing: border-box; }
+        .overlay h2 { font-size: 48px; margin: 0; text-shadow: 3px 3px 6px #000; }
+        .overlay p { font-size: 24px; margin: 20px 0; }
+        #start-screen { display: flex; }
+        #game-over-screen { display: none; }
+        #ui-container { display: none; position: absolute; top: 15px; left: 20px; color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px #000; }
+        .game-button { padding: 15px 30px; font-size: 20px; font-weight: bold; color: #333; background-color: #fff; border: 2px solid #333; border-radius: 10px; cursor: pointer; transition: background-color 0.3s, transform 0.1s; }
+        .game-button:hover { background-color: #ddd; }
+        .game-button:active { transform: scale(0.95); }
+        #narrative-window { width: 800px; max-width: 100%; background-color: rgba(0, 0, 50, 0.8); border: 3px solid #6495ED; border-radius: 10px; padding: 20px; box-sizing: border-box; color: white; font-family: "MS Mincho", "Hiragino Mincho ProN", serif; font-size: 20px; line-height: 1.6; }
+        #narrative-window p { margin: 0; }
+
+        #game-description { width: 800px; background-color: #fff; border: 2px solid #ddd; border-radius: 12px; padding: 20px; box-sizing: border-box; color: #333; }
+        #game-description h3 { text-align: center; margin-top: 0; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #eee; font-size: 22px; }
+        .description-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .description-section h4 { margin-top: 0; margin-bottom: 10px; color: #007BFF; border-left: 5px solid #007BFF; padding-left: 10px; }
+        .description-section ul { list-style: none; padding: 0; margin: 0; } .description-section li { margin-bottom: 8px; }
+        .key { display: inline-block; padding: 2px 8px; border: 1px solid #ccc; border-radius: 4px; background-color: #f9f9f9; font-weight: bold; }
+        
+        #button-container { display: flex; justify-content: center; width: 800px; }
+        #score-history-button { font-size: 18px; padding: 10px 25px; }
+        .modal-content { position: relative; background-color: #fff; color: #333; padding: 30px; border-radius: 12px; width: 90%; max-width: 500px; text-align: left; }
+        .modal-content h2 { text-align: center; margin-top: 0; }
+        .close-button { position: absolute; top: 10px; right: 20px; font-size: 30px; font-weight: bold; cursor: pointer; }
+        #score-list { list-style-type: decimal; padding-left: 30px; }
+        #score-list li { padding: 8px; border-bottom: 1px solid #eee; }
+        #score-list li:last-child { border-bottom: none; }
+        #score-list small { color: #777; margin-left: 10px; }
+
+        /* ★★★ スマホ用UIスタイル ★★★ */
+        #touch-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 140px;
+            z-index: 20;
+            pointer-events: none;
+            display: none;
+        }
+        .touch-button {
+            position: absolute;
+            width: 70px;
+            height: 70px;
+            background-color: rgba(85, 85, 85, 0.7);
+            border: 2px solid rgba(136, 136, 136, 0.8);
+            border-radius: 50%;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+            pointer-events: auto;
+        }
+        #left-btn { bottom: 30px; left: 30px; }
+        #right-btn { bottom: 30px; left: 120px; }
+        #jump-btn { bottom: 30px; right: 120px; }
+        #shoot-btn { bottom: 30px; right: 30px; }
+        
+        #mobile-instructions {
+            display: none;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* ★変更: クリックを透過させる */
+        }
+        .mobile-instruction-text {
+            position: absolute;
+            text-align: center;
+            width: 70px;
+            /* ★変更: スタイルを更新 */
+            font-size: 14px;
+            color: black;
+            font-weight: bold;
+            text-shadow: 0 0 2px white, 0 0 2px white, 0 0 2px white;
+        }
+        #mi-left { bottom: 105px; left: 30px; }
+        #mi-right { bottom: 105px; left: 120px; }
+        #mi-jump { bottom: 105px; right: 120px; }
+        #mi-shoot { bottom: 105px; right: 30px; }
+
+        /* ★★★ スマホ用のレイアウト調整 ★★★ */
+        @media (max-width: 900px) {
+            body { overflow: hidden; }
+            .page-wrapper {
+                padding: 10px;
+                justify-content: center; /* 中央揃えに戻す */
+                height: 100%;
+            }
+            #game-container {
+                width: 100%;
+                height: auto;
+            }
+            #narrative-window {
+                width: 100%;
+                font-size: 16px;
+                padding: 10px;
+                height: auto;
+                min-height: 60px;
+            }
+            #game-description, #button-container {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+
+<div class="page-wrapper">
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="start-screen" class="overlay">
+            <h2>Blue Sphere Dash</h2>
+            <p>エンターキーでスタート</p>
+        </div>
+        <div id="ui-container">
+            <span id="score">スコア: 0</span><br>
+            <span id="lives">ライフ: 3/3</span><br>
+            <span id="timer">残り時間: 60</span>
+        </div>
+        <div id="game-over-screen" class="overlay">
+            <h2 id="game-over-title">ゲームオーバー</h2>
+            <p id="final-score">最終スコア: 0</p>
+            <button id="restart-button" class="game-button">リスタート</button>
+        </div>
+    </div>
+    
+    <div id="narrative-window">
+        <p>ここは二次元の世界......。</p>
+        <p>私は、あなたに会うために進み続ける</p>
+    </div>
+    
+    <div id="game-description">
+        <h3>ゲームの説明</h3>
+        <div class="description-grid">
+            <div class="description-section">
+                <h4>操作方法</h4>
+                <ul>
+                    <li><span class="key">←</span> <span class="key">→</span> : 左右に移動</li>
+                    <li><span class="key">スペース</span> : ジャンプ</li>
+                    <li><span class="key">A</span> : 弾を発射 (黄色アイテム取得後)</li>
+                </ul>
+            </div>
+            <div class="description-section">
+                <h4>敵キャラクター</h4>
+                <ul>
+                    <li><strong>赤い四角 (地上)</strong>: 踏むか弾で倒せる。 [スコア: 1点]</li>
+                    <li><strong>黒い四角 (空中)</strong>: 赤い弾で攻撃してくる。 [スコア: 2点]</li>
+                </ul>
+            </div>
+            <div class="description-section" style="grid-column: 1 / -1;">
+                <h4>アイテム紹介 (三角形)</h4>
+                <ul>
+                    <li><strong>紫 (耐久UP)</strong>: 一度だけダメージを防ぐシールドが付く。</li>
+                    <li><strong>黄 (攻撃UP)</strong>: ダメージを受けるまで何度でも弾が撃てるようになる。</li>
+                    <li><strong>緑 (回復)</strong>: ライフが2以下の時に出現し、ライフを1回復する。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div id="button-container">
+        <button id="score-history-button" class="game-button">スコア履歴</button>
+    </div>
+</div>
+
+<div id="touch-controls">
+    <div id="left-btn" class="touch-button">←</div>
+    <div id="right-btn" class="touch-button">→</div>
+    <div id="jump-btn" class="touch-button">↑</div>
+    <div id="shoot-btn" class="touch-button">A</div>
+    <!-- ★★★ 変更点: 操作説明をtouch-controls内に移動 ★★★ -->
+    <div id="mobile-instructions">
+        <div id="mi-left" class="mobile-instruction-text">移動(左)</div>
+        <div id="mi-right" class="mobile-instruction-text">移動(右)</div>
+        <div id="mi-jump" class="mobile-instruction-text">ジャンプ</div>
+        <div id="mi-shoot" class="mobile-instruction-text">攻撃(A)</div>
+    </div>
+</div>
+
+<div id="score-history-modal" class="overlay" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>スコア履歴</h2>
+        <ol id="score-list"></ol>
+    </div>
+</div>
+
+<script>
+    // --- 初期設定 ---
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const uiContainer = document.getElementById('ui-container');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const timerEl = document.getElementById('timer');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const gameOverTitleEl = document.getElementById('game-over-title');
+    const finalScoreEl = document.getElementById('final-score');
+    const restartButton = document.getElementById('restart-button');
+    const scoreHistoryButton = document.getElementById('score-history-button');
+    const scoreHistoryModal = document.getElementById('score-history-modal');
+    const scoreList = document.getElementById('score-list');
+    const closeButton = document.querySelector('.close-button');
+    const narrativeWindow = document.getElementById('narrative-window');
+    const gameContainer = document.getElementById('game-container');
+    const mobileInstructions = document.getElementById('mobile-instructions');
+
+    const touchControls = document.getElementById('touch-controls');
+    const leftBtn = document.getElementById('left-btn');
+    const rightBtn = document.getElementById('right-btn');
+    const jumpBtn = document.getElementById('jump-btn');
+    const shootBtn = document.getElementById('shoot-btn');
+
+    canvas.width = 800; canvas.height = 400;
+
+    // --- ゲームの定数 ---
+    const GRAVITY = 0.5; const JUMP_FORCE = 12; const PLAYER_SPEED = 5; const BULLET_SPEED = 10; const ENEMY_BULLET_SPEED = 5;
+    const MAX_GROUND_ENEMIES = 3; const MAX_FLYING_ENEMIES = 2; const INITIAL_LIVES = 3; const GAME_DURATION = 60;
+    const INVINCIBILITY_DURATION = 120; const ITEM_LIFESPAN = 300; const HEALING_EFFECT_DURATION = 120;
+    const SCORES_KEY = 'blueSphereDashScores';
+
+    // --- ゲームの状態変数 ---
+    let player, enemies, playerBullets, enemyBullets, defenseItem, attackItem, recoveryItem, score, lives, timeLeft;
+    let gameTimer, groundEnemySpawnTimer, flyingEnemySpawnTimer, defenseItemSpawnTimer, attackItemSpawnTimer, recoveryItemSpawnTimer;
+    let worldOffsetX, keys, isGameOver, gameActive = false;
+    let backgroundObjects;
+    let narrativeState = 0;
+
+    // --- オブジェクト生成関数 ---
+    function createPlayer() { return { x: canvas.width / 2, y: 300, width: 30, height: 30, radius: 15, dx: 0, dy: 0, onGround: false, color: '#007BFF', isInvincible: false, invincibilityTimer: 0, hasShield: false, hasAttack: false, isHealing: false, healingTimer: 0 }; }
+    function createEnemy(type) { return { type: type, x: worldOffsetX + canvas.width + Math.random() * 200, y: type === 'ground' ? ground.y - 30 : Math.random() * (ground.y - 200) + 50, width: 30, height: 30, color: type === 'ground' ? '#DC3545' : 'black', speed: type === 'ground' ? 3 : Math.random() * 2 + 1, shootCooldown: 120 }; }
+    function createItem(type) { return { type: type, x: 0, y: 0, width: 30, height: 30, color: type === 'defense' ? '#8A2BE2' : (type === 'attack' ? '#FFD700' : '#32CD32'), isActive: false, lifeTimer: 0 }; }
+    function createPlayerBullet() { playerBullets.push({ x: player.x + player.radius, y: player.y + player.radius, width: 25, height: 5, color: 'white' }); }
+    function createEnemyBullet(enemy) { const angle = Math.atan2((player.y + player.radius) - (enemy.y + enemy.height / 2), (player.x + player.radius) - (enemy.x + enemy.width / 2)); enemyBullets.push({ x: enemy.x, y: enemy.y + enemy.height / 2, radius: 5, color: 'red', dx: Math.cos(angle) * ENEMY_BULLET_SPEED, dy: Math.sin(angle) * ENEMY_BULLET_SPEED }); }
+
+    const ground = { y: canvas.height - 40, color: '#28A745' };
+    keys = { ArrowRight: false, ArrowLeft: false, Space: false, KeyA: false };
+
+    // --- イベントリスナー ---
+    window.addEventListener('keydown', (e) => {
+        if (keys.hasOwnProperty(e.code)) { e.preventDefault(); keys[e.code] = true; }
+        if (e.code === 'Enter' && !gameActive) { startGame(); }
+    });
+    window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.code)) { e.preventDefault(); keys[e.code] = false; }});
+    restartButton.addEventListener('click', startGame);
+    scoreHistoryButton.addEventListener('click', displayScores);
+    closeButton.addEventListener('click', () => { scoreHistoryModal.style.display = 'none'; });
+    scoreHistoryModal.addEventListener('click', (e) => { if (e.target === scoreHistoryModal) { scoreHistoryModal.style.display = 'none'; } });
+
+    function startGame() {
+        gameActive = true;
+        startScreen.style.display = 'none';
+        gameOverScreen.style.display = 'none';
+        narrativeWindow.innerHTML = '<p>黄色の三角形は、敵を倒す力を私にくれる</p>';
+        init();
+    }
+
+    // --- ゲーム初期化 ---
+    function init() {
+        player = createPlayer();
+        enemies = []; playerBullets = []; enemyBullets = [];
+        defenseItem = createItem('defense'); attackItem = createItem('attack'); recoveryItem = createItem('recovery');
+        backgroundObjects = [];
+        score = 0; lives = INITIAL_LIVES; timeLeft = GAME_DURATION; isGameOver = false;
+        worldOffsetX = player.x - (canvas.width / 2);
+        narrativeState = 0;
+
+        for (let i = 0; i < 30; i++) { backgroundObjects.push({ x: i * (Math.random() * 150 + 250), trunkWidth: 20, trunkHeight: 40, leafWidth: 80, leafHeight: 80 }); }
+        
+        updateUI();
+        uiContainer.style.display = 'block';
+
+        clearInterval(gameTimer); clearTimeout(groundEnemySpawnTimer); clearTimeout(flyingEnemySpawnTimer); clearTimeout(defenseItemSpawnTimer); clearTimeout(attackItemSpawnTimer); clearTimeout(recoveryItemSpawnTimer);
+
+        gameTimer = setInterval(() => { if(isGameOver) return; timeLeft--; if (timeLeft <= 0) { timeLeft = 0; endGame("ゲームクリア"); } updateUI(); }, 1000);
+        
+        function scheduleNextGroundEnemy() { if (isGameOver) return; spawnEnemy('ground'); groundEnemySpawnTimer = setTimeout(scheduleNextGroundEnemy, 2000 + Math.random() * 2000); }
+        function scheduleNextFlyingEnemy() { if (isGameOver) return; spawnEnemy('flying'); flyingEnemySpawnTimer = setTimeout(scheduleNextFlyingEnemy, 3000 + Math.random() * 3000); }
+        scheduleNextGroundEnemy(); scheduleNextFlyingEnemy();
+        
+        defenseItemSpawnTimer = setTimeout(() => scheduleNextItem(defenseItem), 10000);
+        attackItemSpawnTimer = setTimeout(() => scheduleNextItem(attackItem), 15000);
+
+        if (!gameLoop.isRunning) { gameLoop(); }
+    }
+    
+    // --- アイテム & 敵の出現制御 ---
+    function scheduleNextItem(item) { if (isGameOver) return; spawnItem(item); }
+    function spawnItem(item) {
+        if (isGameOver || item.isActive) return;
+        if (item.type === 'defense' && player.hasShield) return;
+        if (item.type === 'attack' && player.hasAttack) return;
+        if (item.type === 'recovery' && lives > 2) return;
+        item.isActive = true; item.lifeTimer = ITEM_LIFESPAN; item.x = player.x + 100 + Math.random() * (canvas.width / 2); item.y = ground.y - item.height - (Math.random() * 80 + 50);
+    }
+    function spawnEnemy(type) { if (isGameOver) return; const currentEnemies = enemies.filter(e => e.type === type); const maxEnemies = type === 'ground' ? MAX_GROUND_ENEMIES : MAX_FLYING_ENEMIES; if (currentEnemies.length < maxEnemies) { enemies.push(createEnemy(type)); } }
+
+    function updateUI() {
+        scoreEl.textContent = `スコア: ${score}`;
+        livesEl.textContent = `ライフ: ${lives} / ${INITIAL_LIVES}`;
+        timerEl.textContent = `残り時間: ${timeLeft}`;
+    }
+    function endGame(message) {
+        isGameOver = true;
+        gameActive = false;
+        clearTimeout(groundEnemySpawnTimer); clearTimeout(flyingEnemySpawnTimer); clearTimeout(defenseItemSpawnTimer); clearTimeout(attackItemSpawnTimer); clearTimeout(recoveryItemSpawnTimer); clearInterval(gameTimer);
+        gameOverTitleEl.textContent = message; finalScoreEl.textContent = `最終スコア: ${score}`;
+        saveScore(score);
+        if (message === "ゲームクリア" && narrativeState === 1) {
+            narrativeWindow.innerHTML = '<p>ありがとう、ここから先は私一人で大丈夫</p>';
+        }
+        gameOverScreen.style.display = 'flex';
+        uiContainer.style.display = 'none';
+    }
+
+    // --- スコア保存・表示関数 ---
+    function saveScore(scoreToSave) {
+        let scores = JSON.parse(localStorage.getItem(SCORES_KEY)) || [];
+        const newEntry = { score: scoreToSave, date: new Date().toLocaleString('ja-JP') };
+        scores.unshift(newEntry);
+        scores = scores.slice(0, 10);
+        localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
+    }
+
+    function displayScores() {
+        let scores = JSON.parse(localStorage.getItem(SCORES_KEY)) || [];
+        scoreList.innerHTML = '';
+        if (scores.length === 0) {
+            scoreList.innerHTML = '<li>まだプレイ履歴がありません。</li>';
+        } else {
+            scores.forEach(entry => {
+                const li = document.createElement('li');
+                li.innerHTML = `<strong>${entry.score}点</strong> <small>${entry.date}</small>`;
+                scoreList.appendChild(li);
+            });
+        }
+        scoreHistoryModal.style.display = 'flex';
+    }
+
+    // --- 描画関数 ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.save(); ctx.translate(-worldOffsetX, 0);
+
+        backgroundObjects.forEach(obj => { ctx.fillStyle = '#8B4513'; ctx.fillRect(obj.x, ground.y - obj.trunkHeight, obj.trunkWidth, obj.trunkHeight); ctx.fillStyle = '#228B22'; ctx.beginPath(); const treeTopX = obj.x + (obj.trunkWidth / 2); const treeTopY = ground.y - obj.trunkHeight - obj.leafHeight; ctx.moveTo(treeTopX, treeTopY); ctx.lineTo(treeTopX - obj.leafWidth / 2, ground.y - obj.trunkHeight); ctx.lineTo(treeTopX + obj.leafWidth / 2, ground.y - obj.trunkHeight); ctx.closePath(); ctx.fill(); });
+        ctx.fillStyle = ground.color; ctx.fillRect(0, ground.y, canvas.width * 100, canvas.height - ground.y); ctx.fillStyle = '#C2B280'; ctx.fillRect(-10, 0, 10, canvas.height);
+
+        let shouldDrawPlayer = !(player.isInvincible && Math.floor(player.invincibilityTimer / 10) % 2 === 0);
+        if (shouldDrawPlayer) {
+            ctx.fillStyle = player.color; ctx.beginPath(); ctx.arc(player.x + player.radius, player.y + player.radius, player.radius, 0, Math.PI * 2); ctx.fill();
+            if (player.hasShield) { ctx.strokeStyle = 'black'; ctx.lineWidth = 3; ctx.stroke(); }
+            if (player.isHealing && Math.floor(player.healingTimer / 10) % 2 !== 0) { ctx.fillStyle = '#32CD32'; ctx.beginPath(); ctx.arc(player.x + player.radius, player.y + player.radius, 6, 0, Math.PI * 2); ctx.fill(); }
+            if (player.hasAttack) { ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(player.x + player.radius, player.y + player.radius, 5, 0, Math.PI * 2); ctx.fill(); }
+        }
+
+        [defenseItem, attackItem, recoveryItem].forEach(item => { if (item.isActive) { ctx.fillStyle = item.color; ctx.beginPath(); ctx.moveTo(item.x + item.width / 2, item.y); ctx.lineTo(item.x, item.y + item.height); ctx.lineTo(item.x + item.width, item.y + item.height); ctx.closePath(); ctx.fill(); } });
+        playerBullets.forEach(bullet => { ctx.fillStyle = bullet.color; ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height); });
+        enemyBullets.forEach(bullet => { ctx.fillStyle = bullet.color; ctx.beginPath(); ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2); ctx.fill(); });
+        enemies.forEach(enemy => { ctx.fillStyle = enemy.color; ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height); });
+        ctx.restore();
+    }
+    
+    function handlePlayerDamage() {
+        if (player.isInvincible) return;
+
+        if (player.hasShield) {
+            player.hasShield = false;
+            defenseItemSpawnTimer = setTimeout(() => scheduleNextItem(defenseItem), 10000 + Math.random() * 5000);
+        } else {
+            lives--;
+            if (player.hasAttack) {
+                player.hasAttack = false;
+                attackItemSpawnTimer = setTimeout(() => scheduleNextItem(attackItem), 10000 + Math.random() * 5000);
+            }
+            if (lives <= 2 && !recoveryItem.isActive) {
+                clearTimeout(recoveryItemSpawnTimer);
+                recoveryItemSpawnTimer = setTimeout(() => scheduleNextItem(recoveryItem), 3000);
+            }
+            if (lives <= 0) { lives = 0; endGame("ゲームオーバー"); }
+        }
+        player.isInvincible = true;
+        player.invincibilityTimer = INVINCIBILITY_DURATION;
+        updateUI();
+    }
+
+    // --- 更新関数 ---
+    function update() {
+        if (isGameOver) return;
+        
+        if (player.isInvincible) { if (--player.invincibilityTimer <= 0) player.isInvincible = false; }
+        if (player.isHealing) { if (--player.healingTimer <= 0) player.isHealing = false; }
+
+        [defenseItem, attackItem, recoveryItem].forEach(item => { if (item.isActive) { if (--item.lifeTimer <= 0) { item.isActive = false; const nextTimer = setTimeout(() => scheduleNextItem(item), 5000 + Math.random() * 5000); if (item.type === 'defense') defenseItemSpawnTimer = nextTimer; else if (item.type === 'attack') attackItemSpawnTimer = nextTimer; else recoveryItemSpawnTimer = nextTimer; } if (player.x < item.x + item.width && player.x + player.width > item.x && player.y < item.y + item.height && player.y + player.height > item.y) { if (item.type === 'defense') player.hasShield = true; if (item.type === 'attack') player.hasAttack = true; if (item.type === 'recovery') { if(lives < INITIAL_LIVES) lives++; player.isHealing = true; player.healingTimer = HEALING_EFFECT_DURATION; updateUI(); } item.isActive = false; } } });
+
+        if (keys.KeyA && player.hasAttack) { createPlayerBullet(); keys.KeyA = false; }
+        
+        for (let i = playerBullets.length - 1; i >= 0; i--) { playerBullets[i].x += BULLET_SPEED; if (playerBullets[i].x > worldOffsetX + canvas.width) playerBullets.splice(i, 1); }
+        for (let i = enemyBullets.length - 1; i >= 0; i--) { const bullet = enemyBullets[i]; bullet.x += bullet.dx; bullet.y += bullet.dy; if (bullet.x < worldOffsetX - bullet.radius || bullet.x > worldOffsetX + canvas.width + bullet.radius || bullet.y < -bullet.radius || bullet.y > canvas.height + bullet.radius) { enemyBullets.splice(i, 1); } }
+
+        if (player.onGround) { if (keys.ArrowRight) player.dx = PLAYER_SPEED; else if (keys.ArrowLeft) player.dx = -PLAYER_SPEED; else player.dx = 0; } else { if (keys.ArrowRight) player.dx = PLAYER_SPEED; else if (keys.ArrowLeft) player.dx = -PLAYER_SPEED; }
+        if (keys.Space && player.onGround) { player.dy = -JUMP_FORCE; player.onGround = false; }
+        player.x += player.dx; player.dy += GRAVITY; player.y += player.dy; player.onGround = false;
+        if (player.x < 0) player.x = 0;
+        if (player.y + player.height >= ground.y) { player.y = ground.y - player.height; player.dy = 0; player.onGround = true; }
+        
+        const deadZoneLeft = worldOffsetX + canvas.width * 0.4; const deadZoneRight = worldOffsetX + canvas.width * 0.6; if (player.x < deadZoneLeft) worldOffsetX = player.x - canvas.width * 0.4; else if (player.x > deadZoneRight) worldOffsetX = player.x - canvas.width * 0.6; if (worldOffsetX < 0) worldOffsetX = 0;
+
+        // --- 衝突判定 ---
+        for (let i = playerBullets.length - 1; i >= 0; i--) { for (let j = enemies.length - 1; j >= 0; j--) { const bullet = playerBullets[i]; const enemy = enemies[j]; if (bullet && enemy && bullet.x < enemy.x + enemy.width && bullet.x + bullet.width > enemy.x && bullet.y < enemy.y + enemy.height && bullet.y + bullet.height > enemy.y) { score += (enemy.type === 'ground') ? 1 : 2; enemies.splice(j, 1); playerBullets.splice(i, 1); updateUI(); if (narrativeState === 0) { narrativeWindow.innerHTML = '<p>この力は、あなたが教えてくれた</p><p>きっと、たどり着くから</p>'; narrativeState = 1; } break; } } }
+        for (let i = enemyBullets.length - 1; i >= 0; i--) { const bullet = enemyBullets[i]; const dx = (player.x + player.radius) - bullet.x; const dy = (player.y + player.radius) - bullet.y; const distance = Math.sqrt(dx * dx + dy * dy); if (distance < player.radius + bullet.radius) { handlePlayerDamage(); enemyBullets.splice(i, 1); } }
+        
+        enemies.forEach((enemy, index) => {
+            enemy.x -= enemy.speed;
+            if (enemy.type === 'flying') { enemy.shootCooldown--; if (enemy.shootCooldown <= 0 && player.x < enemy.x && Math.abs(player.x - enemy.x) < canvas.width * 0.8) { createEnemyBullet(enemy); enemy.shootCooldown = 120; } }
+            
+            if ( player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y ) {
+                if (player.dy > 0 && (player.y + player.height) < (enemy.y + 20)) {
+                    score += (enemy.type === 'ground') ? 1 : 2; enemies.splice(index, 1); player.dy = -6; updateUI();
+                } else { handlePlayerDamage(); }
+            }
+            if (enemy.x + enemy.width < worldOffsetX - canvas.width) { enemies.splice(index, 1); }
+        });
+    }
+
+    function gameLoop() { if (!gameActive) { gameLoop.isRunning = false; return; } gameLoop.isRunning = true; update(); draw(); requestAnimationFrame(gameLoop); }
+    gameLoop.isRunning = false;
+    
+    // --- 初期化 & スマホ対応 ---
+    function initialSetup() {
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (isTouchDevice) {
+            touchControls.style.display = 'block';
+            mobileInstructions.style.display = 'block';
+            document.querySelector('#start-screen p').textContent = 'タップしてスタート';
+            
+            const warning = document.createElement('p');
+            warning.textContent = '(スマホは縦向きで遊んでください)'; // ★変更
+            warning.style.fontSize = '16px';
+            warning.style.marginTop = '20px';
+            startScreen.appendChild(warning);
+            
+            startScreen.addEventListener('touchstart', (e) => { e.preventDefault(); if (!gameActive) startGame(); }, { once: true });
+        }
+        
+        const handleTouch = (e, key, value) => { e.preventDefault(); keys[key] = value; };
+        leftBtn.addEventListener('touchstart', (e) => handleTouch(e, 'ArrowLeft', true));
+        leftBtn.addEventListener('touchend', (e) => handleTouch(e, 'ArrowLeft', false));
+        rightBtn.addEventListener('touchstart', (e) => handleTouch(e, 'ArrowRight', true));
+        rightBtn.addEventListener('touchend', (e) => handleTouch(e, 'ArrowRight', false));
+        jumpBtn.addEventListener('touchstart', (e) => handleTouch(e, 'Space', true));
+        jumpBtn.addEventListener('touchend', (e) => handleTouch(e, 'Space', false));
+        shootBtn.addEventListener('touchstart', (e) => handleTouch(e, 'KeyA', true));
+        shootBtn.addEventListener('touchend', (e) => handleTouch(e, 'KeyA', false));
+
+        // 初期描画
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = ground.color;
+        ctx.fillRect(0, ground.y, canvas.width, canvas.height - ground.y);
+    }
+    initialSetup();
+
+</script>
+</body>
+</html>
